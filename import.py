@@ -2,41 +2,168 @@ import json
 import models
 import datetime
 import os
+import uuid
+import re
 from tqdm import tqdm
 from neomodel import config
-from models import (Track, Channel, TrackRel)
+from models import (Track, Channel, Tag, TagRel)
 
-config.DATABASE_URL = os.environ["NEO4J_BOLT_URL"]
 
-with open('tmp/channels.json', 'r') as f:
-    channels = json.load(f)
+def get_channel_from_dict(channel_dict):
+    title = channel_dict.get('title')
+    body = channel_dict.get('body', None)
+    created_timestamp = channel_dict.get('created', 0)//1000
+    created = datetime.datetime.fromtimestamp(created_timestamp).date()
+    image = channel_dict.get('image', None)
+    is_featured = channel_dict.get('isFeatured', False)
+    link = channel_dict.get('link', None)
+    slug = channel_dict.get('slug', None)
+    updated_timestamp = channel_dict.get('updated', 0)//1000
+    updated = datetime.datetime.fromtimestamp(updated_timestamp).date()
+    return models.Channel(title=title, body=body, created=created, image=image,
+                          is_featured=is_featured, link=link, slug=slug,
+                          updated=updated)
 
-# for channel in channels:
-#     print(json.dumps(channels[channel], indent=4))
 
-# print(json.dumps(channels, indent=4))
+def get_track_from_dict(track_dict):
+    title = track_dict.get('title')
+    url = track_dict.get('url')
+    body = track_dict.get('body')
+    discogs_url = track_dict.get('discogsUrl')
+    media_not_available = track_dict.get('mediaNotAvailable', False)
+    created_timestamp = track_dict.get('created', 0)//1000
+    created = datetime.datetime.fromtimestamp(created_timestamp).date()
+    return models.Track(title=title, url=url, body=body,
+                        discogs_url=discogs_url,
+                        media_not_available=media_not_available,
+                        created=created)
 
-its = 10
 
-keys = channels.keys()
-for uid in tqdm(keys):
-    title = channels[uid].get('title', 'Default title')
-    body = channels[uid].get('body', None)
-    created = datetime.datetime.fromtimestamp(channels[uid].get('created', 0)//1000).date()
-    image = channels[uid].get('image', None)
-    is_featured = channels[uid].get('is_featured', False)
-    link = channels[uid].get('link', None)
-    slug = channels[uid].get('slug', None)
-    updated = datetime.datetime.fromtimestamp(channels[uid].get('updated', 0)//1000).date()
-    follows = channels[uid].get('follows', None)
-    likes = channels[uid].get('likes', None)
+def import_from_json(channels, tracks):
+    regex = re.compile(r'#[\w-]+\s')
+    tags = {}
+    tracks_map = {}
+    keys = channels.keys()
+    for uid in tqdm(keys):
+        channel = get_channel_from_dict(channels[uid])
+        channel.save()
 
-    channel = models.Channel(title=title, body=body, created=created, image=image,
-                    is_featured=is_featured, link=link, slug=slug,
-                    updated=updated, follows=follows, likes=likes)
-    print(channel)
-    channel.save()
+        tracks_list = channels[uid].get('tracks')
+        if not tracks_list:
+            continue
+        for track_id in tqdm(tracks_list.keys()):
+            url = tracks[track_id]['url']
+            if not url:
+                continue
+            if url in tracks_map.keys():
+                track = tracks_map[url]
+            else:
+                track = get_track_from_dict(tracks[track_id])
+                track.save()
+                tracks_map[url] = track
+                channel.likes.connect(track)
 
-    if its <= 0:
-        break
-    its -= 1
+            if not track.body:
+                continue
+            for tag_name in regex.findall(tracks[track_id]['body']):
+                tag_name = tag_name.strip()[1:]
+                if tag_name in tags.keys():
+                    tag = tags[tag_name]
+                else:
+                    tag = models.Tag(name=tag_name)
+                    tag.save()
+                    tags[tag_name] = tag
+                    track.tags.connect(tag, {'channel': channel.uid})
+
+    for uid in tqdm(keys):
+        slug = channels[uid]['slug']
+        channel = models.Channel.nodes.get(slug=slug)
+
+        followed_ls = channels[uid].get('favoriteChannels')
+        if not followed_ls:
+            continue
+        for followed_id in followed_ls:
+            channel_followed_dict = channels.get(followed_id)
+            if not channel_followed_dict:
+                continue
+            followed_slug = channel_followed_dict['slug']
+            channel_followed = models.Channel.nodes.get(slug=followed_slug)
+            channel.follows.connect(channel_followed)
+
+def update_channel(channel_dict):
+    channel = models.Channel.nodes.get(slug=channel_dict['slug'])
+    if not channel:
+        channel = get_channel_from_dict(channels[uid])
+        channel.save()
+    return channel
+
+def update_track(track_dict):
+    track = models.Track.nodes.get(url=track_dict['url'])
+    if not track:
+        track = get_track_from_dict(tracks_dict)
+        track.save()
+    return track
+
+def update_tag(tag_name):
+    tag = models.Tag.nodes.get(name=tag_name)
+    if not tag:
+        tag = models.Tag(name=tag_name)
+        tag.save()
+    return tag
+
+def update_from_json(channels, tracks):
+    regex = re.compile(r'#[\w-]+\s')
+    tags = {}
+    tracks_map = {}
+    keys = channels.keys()
+    for uid in tqdm(keys):
+        channel_dict = channels[uid]
+        channel = update_channel(channel_dict)
+
+        tracks_list = channels[uid].get('tracks')
+        if not tracks_list:
+            continue
+        for track_id in tqdm(tracks_list.keys()):
+            url = tracks[track_id]['url']
+            if not url:
+                continue
+            track_dict = tracks[track_id]
+            track = update_track(track_dict)
+
+            rel = channel.likes.relationship(track)
+            if not rel:
+                channel.likes.connect(track)
+
+            if not track.body:
+                continue
+            for tag_name in regex.findall(track.body):
+                tag_name = tag_name.strip()[1:]
+                tag = update_tag(tag_name)
+                tags[tag_name] = tag
+                rel = track.tags.relationship(tag)
+                if not rel:
+                    track.tags.connect(tag, {'channel': channel.uid})
+
+    for uid in tqdm(keys):
+        slug = channels[uid]['slug']
+        channel = models.Channel.nodes.get(slug=slug)
+
+        followed_ls = channels[uid].get('favoriteChannels')
+        if not followed_ls:
+            continue
+        for followed_id in followed_ls:
+            channel_followed_dict = channels.get(followed_id)
+            if not channel_followed_dict:
+                continue
+            followed_slug = channel_followed_dict['slug']
+            channel_followed = models.Channel.nodes.get(slug=followed_slug)
+            channel.follows.connect(channel_followed)
+
+
+if __name__=="__main__":
+    config.DATABASE_URL = os.environ["NEO4J_BOLT_URL"]
+    with open('tmp/channels.json', 'r') as f:
+        channels = json.load(f)
+    with open('tmp/tracks.json', 'r') as f:
+        tracks = json.load(f)
+        update_from_json(channels, tracks)
