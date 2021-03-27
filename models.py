@@ -1,25 +1,34 @@
-from neomodel import (config, StructuredNode, StringProperty, IntegerProperty,
+from neomodel import (StructuredNode, StringProperty, IntegerProperty,
                       UniqueIdProperty, RelationshipTo, RelationshipFrom,
                       DateTimeFormatProperty, FloatProperty, StructuredRel,
                       BooleanProperty, DateProperty)
 
-class TrackRel(StructuredRel):
-    count = IntegerProperty(unique_index=False, required=True)
+class TagRel(StructuredRel):
+    channel = StringProperty(required=True)
 
 class Track(StructuredNode):
     uid = UniqueIdProperty()
-    tag_id = StringProperty(unique_index=True, required=True)
-    name = StringProperty(unique_index=True, required=True)
+    url = StringProperty(unique_index=True, required=True)
+    title = StringProperty()
+    body = StringProperty()
+    media_not_available = BooleanProperty(default=False)
+    created = DateProperty()
+    discogs_url = StringProperty()
+    tags = RelationshipTo('Tag', 'TAGGED', model=TagRel)
 
 class Channel(StructuredNode):
     uid = UniqueIdProperty()
-    title = StringProperty(required=True)
+    slug = StringProperty(unique_index=True, required=True)
+    title = StringProperty()
     body = StringProperty()
     created = DateProperty()
     image = StringProperty()
     is_featured = BooleanProperty(default=False)
     link = StringProperty()
-    slug = StringProperty(unique_index=True)
     updated = DateProperty()
     follows = RelationshipTo('Channel', 'FOLLOWS')
-    likes = RelationshipTo(Track, 'LIKES')
+    likes = RelationshipTo('Track', 'LIKES')
+
+class Tag(StructuredNode):
+    uid = UniqueIdProperty()
+    name = StringProperty(unique_index=True, required=True)
