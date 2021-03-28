@@ -14,14 +14,14 @@ def get_channel_from_dict(channel_dict):
     title = channel_dict.get('title')
     body = channel_dict.get('body', None)
     created_timestamp = channel_dict.get('created', 0)//1000
-    created = datetime.datetime.fromtimestamp(created_timestamp).date()
+    created_date = datetime.datetime.fromtimestamp(created_timestamp).date()
     image = channel_dict.get('image', None)
     is_featured = channel_dict.get('isFeatured', False)
     link = channel_dict.get('link', None)
     slug = channel_dict.get('slug', None)
     updated_timestamp = channel_dict.get('updated', 0)//1000
     updated = datetime.datetime.fromtimestamp(updated_timestamp).date()
-    return models.Channel(title=title, body=body, created=created, image=image,
+    return models.Channel(title=title, body=body, created_date=created_date, image=image,
                           is_featured=is_featured, link=link, slug=slug,
                           updated=updated)
 
@@ -32,11 +32,8 @@ def get_track_from_dict(track_dict):
     body = track_dict.get('body')
     discogs_url = track_dict.get('discogsUrl')
     media_not_available = track_dict.get('mediaNotAvailable', False)
-    created_timestamp = track_dict.get('created', 0)//1000
-    created = datetime.datetime.fromtimestamp(created_timestamp).date()
     return models.Track(title=title, url=url, discogs_url=discogs_url,
-                        media_not_available=media_not_available,
-                        created=created)
+                        media_not_available=media_not_available)
 
 
 def import_from_json(channels, tracks):
@@ -45,7 +42,7 @@ def import_from_json(channels, tracks):
     tracks_map = {}
     keys = channels.keys()
     start = 100
-    stop = 200
+    stop = 110
     for uid in tqdm(islice(keys, start, stop)):
         channel = get_channel_from_dict(channels[uid])
         channel.save()
@@ -63,7 +60,9 @@ def import_from_json(channels, tracks):
                 track = get_track_from_dict(tracks[track_id])
                 track.save()
                 tracks_map[url] = track
-            track_rel = channel.likes.connect(track)
+            liked_timestamp = tracks[track_id].get('created', 0)//1000
+            liked_date = datetime.datetime.fromtimestamp(liked_timestamp).date()
+            track_rel = channel.likes.connect(track, {'date': liked_date})
             track_body = tracks[track_id].get('body')
             if not track_body:
                 continue

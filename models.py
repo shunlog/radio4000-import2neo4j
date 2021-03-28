@@ -1,7 +1,7 @@
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
                       UniqueIdProperty, RelationshipTo, RelationshipFrom,
-                      DateTimeFormatProperty, FloatProperty, StructuredRel,
-                      BooleanProperty, DateProperty)
+                      FloatProperty, StructuredRel, BooleanProperty,
+                      DateProperty)
 
 
 class TagRel(StructuredRel):
@@ -13,13 +13,13 @@ class Track(StructuredNode):
     url = StringProperty(unique_index=True, required=True)
     title = StringProperty()
     media_not_available = BooleanProperty(default=False)
-    created = DateProperty()
     discogs_url = StringProperty()
     tags = RelationshipTo('Tag', 'TAGGED', model=TagRel)
 
 
 class TrackRel(StructuredRel):
     body = StringProperty()
+    date = DateProperty()
 
 
 class Channel(StructuredNode):
@@ -27,11 +27,11 @@ class Channel(StructuredNode):
     slug = StringProperty(unique_index=True, required=True)
     title = StringProperty()
     body = StringProperty()
-    created = DateProperty()
+    created_date = DateProperty()
     image = StringProperty()
     is_featured = BooleanProperty(default=False)
     link = StringProperty()
-    updated = DateProperty()
+    updated_date = DateProperty()
     follows = RelationshipTo('Channel', 'FOLLOWS')
     likes = RelationshipTo('Track', 'LIKES', model=TrackRel)
 
