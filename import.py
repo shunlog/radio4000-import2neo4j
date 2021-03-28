@@ -33,8 +33,7 @@ def get_track_from_dict(track_dict):
     media_not_available = track_dict.get('mediaNotAvailable', False)
     created_timestamp = track_dict.get('created', 0)//1000
     created = datetime.datetime.fromtimestamp(created_timestamp).date()
-    return models.Track(title=title, url=url, body=body,
-                        discogs_url=discogs_url,
+    return models.Track(title=title, url=url, discogs_url=discogs_url,
                         media_not_available=media_not_available,
                         created=created)
 
@@ -61,12 +60,15 @@ def import_from_json(channels, tracks):
                 track = get_track_from_dict(tracks[track_id])
                 track.save()
                 tracks_map[url] = track
-                channel.likes.connect(track)
-
-            if not track.body:
+            track_rel = channel.likes.connect(track)
+            track_body = tracks[track_id].get('body')
+            if not track_body:
                 continue
-            for tag_name in regex.findall(tracks[track_id]['body']):
-                tag_name = tag_name.strip()[1:]
+            track_rel.body = track_body
+            track_rel.save()
+
+            for tag_name in regex.findall(track_body):
+                tag_name = tag_name.strip()[1:]  # get rid of '#'
                 if tag_name in tags.keys():
                     tag = tags[tag_name]
                 else:
@@ -166,4 +168,4 @@ if __name__=="__main__":
         channels = json.load(f)
     with open('tmp/tracks.json', 'r') as f:
         tracks = json.load(f)
-        update_from_json(channels, tracks)
+        import_from_json(channels, tracks)
