@@ -44,7 +44,9 @@ def import_from_json(channels, tracks):
     tags = {}
     tracks_map = {}
     keys = channels.keys()
-    for uid in tqdm(islice(keys, 100, 200)):
+    start = 100
+    stop = 200
+    for uid in tqdm(islice(keys, start, stop)):
         channel = get_channel_from_dict(channels[uid])
         channel.save()
 
@@ -78,85 +80,11 @@ def import_from_json(channels, tracks):
                     tags[tag_name] = tag
                     track.tags.connect(tag, {'channel': channel.uid})
 
-    for uid in tqdm(keys):
-        slug = channels[uid]['slug']
-        channel = models.Channel.nodes.get_or_none(slug=slug)
-
-        followed_ls = channels[uid].get('favoriteChannels')
-        if not followed_ls:
-            continue
-        for followed_id in followed_ls:
-            channel_followed_dict = channels.get(followed_id)
-            if not channel_followed_dict:
-                continue
-            followed_slug = channel_followed_dict['slug']
-            channel_followed = models.Channel.nodes.get(slug=followed_slug)
-            channel.follows.connect(channel_followed)
-
-
-def update_channel(channel_dict):
-    channel = models.Channel.nodes.get(slug=channel_dict['slug'])
-    if not channel:
-        channel = get_channel_from_dict(channels[uid])
-        channel.save()
-    return channel
-
-
-def update_track(track_dict):
-    track = models.Track.nodes.get(url=track_dict['url'])
-    if not track:
-        track = get_track_from_dict(tracks_dict)
-        track.save()
-    return track
-
-
-def update_tag(tag_name):
-    tag = models.Tag.nodes.get(name=tag_name)
-    if not tag:
-        tag = models.Tag(name=tag_name)
-        tag.save()
-    return tag
-
-
-def update_from_json(channels, tracks):
-    regex = re.compile(r'#[\w-]+\s')
-    tags = {}
-    tracks_map = {}
-    keys = channels.keys()
-    for uid in tqdm(islice(keys, 100, 200)):
-        channel_dict = channels[uid]
-        channel = update_channel(channel_dict)
-
-        tracks_list = channels[uid].get('tracks')
-        if not tracks_list:
-            continue
-        for track_id in tqdm(tracks_list.keys()):
-            url = tracks[track_id]['url']
-            if not url:
-                continue
-            track_dict = tracks[track_id]
-            track = update_track(track_dict)
-
-            rel = channel.likes.relationship(track)
-            if not rel:
-                channel.likes.connect(track)
-
-            if not track.body:
-                continue
-            for tag_name in regex.findall(track.body):
-                tag_name = tag_name.strip()[1:]
-                tag = update_tag(tag_name)
-                tags[tag_name] = tag
-                rel = track.tags.relationship(tag)
-                if not rel:
-                    track.tags.connect(tag, {'channel': channel.uid})
-
-    for uid in tqdm(keys):
+    for uid in tqdm(islice(keys, start, stop)):
         slug = channels[uid]['slug']
         channel = models.Channel.nodes.get_or_none(slug=slug)
         if not channel:
             continue
-
         followed_ls = channels[uid].get('favoriteChannels')
         if not followed_ls:
             continue
@@ -165,10 +93,11 @@ def update_from_json(channels, tracks):
             if not channel_followed_dict:
                 continue
             followed_slug = channel_followed_dict['slug']
-            channel_followed = models.Channel.nodes.get(slug=followed_slug)
+            channel_followed = models.Channel.nodes.get_or_none(slug=followed_slug)
             if not channel_followed:
                 continue
             channel.follows.connect(channel_followed)
+
 
 
 if __name__=="__main__":
