@@ -4,6 +4,7 @@ import datetime
 import os
 import uuid
 import re
+from itertools import islice
 from tqdm import tqdm
 from neomodel import config
 from models import (Track, Channel, Tag, TagRel)
@@ -43,7 +44,7 @@ def import_from_json(channels, tracks):
     tags = {}
     tracks_map = {}
     keys = channels.keys()
-    for uid in tqdm(keys):
+    for uid in tqdm(islice(keys, 100, 200)):
         channel = get_channel_from_dict(channels[uid])
         channel.save()
 
@@ -79,7 +80,7 @@ def import_from_json(channels, tracks):
 
     for uid in tqdm(keys):
         slug = channels[uid]['slug']
-        channel = models.Channel.nodes.get(slug=slug)
+        channel = models.Channel.nodes.get_or_none(slug=slug)
 
         followed_ls = channels[uid].get('favoriteChannels')
         if not followed_ls:
@@ -92,12 +93,14 @@ def import_from_json(channels, tracks):
             channel_followed = models.Channel.nodes.get(slug=followed_slug)
             channel.follows.connect(channel_followed)
 
+
 def update_channel(channel_dict):
     channel = models.Channel.nodes.get(slug=channel_dict['slug'])
     if not channel:
         channel = get_channel_from_dict(channels[uid])
         channel.save()
     return channel
+
 
 def update_track(track_dict):
     track = models.Track.nodes.get(url=track_dict['url'])
@@ -106,6 +109,7 @@ def update_track(track_dict):
         track.save()
     return track
 
+
 def update_tag(tag_name):
     tag = models.Tag.nodes.get(name=tag_name)
     if not tag:
@@ -113,12 +117,13 @@ def update_tag(tag_name):
         tag.save()
     return tag
 
+
 def update_from_json(channels, tracks):
     regex = re.compile(r'#[\w-]+\s')
     tags = {}
     tracks_map = {}
     keys = channels.keys()
-    for uid in tqdm(keys):
+    for uid in tqdm(islice(keys, 100, 200)):
         channel_dict = channels[uid]
         channel = update_channel(channel_dict)
 
@@ -148,7 +153,9 @@ def update_from_json(channels, tracks):
 
     for uid in tqdm(keys):
         slug = channels[uid]['slug']
-        channel = models.Channel.nodes.get(slug=slug)
+        channel = models.Channel.nodes.get_or_none(slug=slug)
+        if not channel:
+            continue
 
         followed_ls = channels[uid].get('favoriteChannels')
         if not followed_ls:
@@ -159,6 +166,8 @@ def update_from_json(channels, tracks):
                 continue
             followed_slug = channel_followed_dict['slug']
             channel_followed = models.Channel.nodes.get(slug=followed_slug)
+            if not channel_followed:
+                continue
             channel.follows.connect(channel_followed)
 
 
@@ -168,4 +177,4 @@ if __name__=="__main__":
         channels = json.load(f)
     with open('tmp/tracks.json', 'r') as f:
         tracks = json.load(f)
-        import_from_json(channels, tracks)
+    import_from_json(channels, tracks)
